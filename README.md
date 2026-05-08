@@ -1,27 +1,28 @@
 # chrc
 
-`chrc` (change runcom) is a small shell command for quickly switching shell runcom snippets such as zshrc-like profiles.
+`chrc` (change runcom) is a small shell function for quickly switching shell runcom snippets such as zshrc-like profiles.
 
 ## Install
 
-```sh
-chmod +x chrc
-mkdir -p ~/bin
-cp chrc ~/bin/chrc
-```
-
-Make sure `~/bin` is in your `PATH`.
-
-For current-shell switching, add this to `~/.zshrc` or `~/.bashrc`:
+Clone this repository under `~/.chrc`:
 
 ```sh
-eval "$(chrc init)"
+git clone git@github.com:OrcaxNet/chrc.git ~/.chrc/chrc
 ```
+
+Add this to `~/.zshrc` or `~/.bashrc`:
+
+```sh
+export CHRC_HOME="$HOME/.chrc"
+[ -s "$HOME/.chrc/chrc/chrc" ] && . "$HOME/.chrc/chrc/chrc"
+```
+
+This only registers the `chrc` shell function during shell startup. Profiles are loaded only when you run `chrc <identifier>`, and profile metadata is scanned only when you run `chrc list`.
 
 ## Usage
 
 ```sh
-chrc <identifier>        # switch to ~/.chrc/<identifier>.sh after init setup
+chrc <identifier>        # source ~/.chrc/<identifier>.sh in the current shell
 chrc new <identifier>    # create a new template
 chrc list                # list ID, desc, and file location
 chrc cp <identifier>     # copy profile content to clipboard on macOS
@@ -30,12 +31,6 @@ chrc show <identifier>   # print profile content
 chrc path <identifier>   # print profile path
 chrc rm <identifier>     # remove profile after confirmation
 chrc help                # show help
-```
-
-Without `eval "$(chrc init)"`, use:
-
-```sh
-eval "$(chrc <identifier>)"
 ```
 
 ## Profile template
