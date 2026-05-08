@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CHRC_HOME="${CHRC_HOME:-$HOME/.chrc}"
+VERSION="0.1.0"
+
+usage() {
+  cat <<'EOF'
+chrc (change runcom) - switch shell runcom snippets quickly
+
+Usage:
+  chrc <identifier>        Print source command for ~/.chrc/<identifier>.sh
+  chrc use <identifier>    Same as chrc <identifier>
+  chrc new <identifier>    Create a new runcom template
+  chrc list                List runcom profiles as ID, desc, file-loc
+  chrc cp <identifier>     Copy profile file path/content helper
+  chrc edit <identifier>   Open profile in $EDITOR
+  chrc show <identifier>   Print profile content
+  chrc path <identifier>   Print profile file path
+  chrc rm <identifier>     Remove profile after confirmation
+  chrc init                Print shell function for current-shell switching
+  chrc help                Show this help
+  chrc version             Show version
+
+Examples:
+  eval "$(chrc work)"
+  chrc new work
+  chrc list
+  chrc cp work
+
+Recommended setup for zsh/bash:
+  eval "$(chrc init)"
+
+After setup:
+  chrc work
+EOF
+}
+
+err() {
+  printf 'chrc: %s\n' "$*" >&2
+}
+
+ensure_home() {
+  mkdir -p "$CHRC_HOME"
+}
+
+valid_identifier() {
+  [[ "${1:-}" =~ ^[A-Za-z0-9._-]+$ ]]
+}
+
+require_identifier() {
+  local identifier="${1:-}"
+  if [[ -z "$identifier" ]]; then
+    err "missing identifier"
+    exit 2
+  fi
+  if ! valid_identifier "$identifier"; then
+    err "invalid identifier: $identifier"
+    err "use only letters, numbers, dots, underscores, and hyphens"
+    exit 2
+  fi
+}
+
+profile_path() {
+  printf '%s/%s.sh\n' "$CHRC_HOME" "$1"
+}
+
+require_profile() {
+  local identifier="$1"
+  local file
+  file="$(profile_path "$identifier")"
+  if [[ ! -f "$file" ]]; then
+    err "profile not found: $identifier ($file)"
+    exit 1
+  fi
+  printf '%s\n' "$file"
+}
+
+read_meta() {
+  local key="$1"
+  local file="$2"
+  local line
+  line="$(grep -m 1 -E "^#[[:space:]]*$key([[:space:]]+|$)" "$file" 2>/dev/null || true)"
+  printf '%s\n' "${line#* }"
+}
+
+cmd_use() {
+  local identifier="$1"
+  require_identifier "$identifier"
+  local file
+  file="$(require_profile "$identifier")"
+  printf 'source %q\n' "$file"
+}
+
+cmd_new() {
+  local identifier="$1"
+  require_identifier "$identifier"
+  ensure_home
+  local file
+  file="$(profile_path "$identifier")"
+  if [[ -e "$file" ]]; then
+    err "profile already exists: $file"
+    exit 1
+  fi
+  cat > "$file" <<EOF
+#ID $identifier
+#desc Describe this runcom profile here
+
+# Add shell configuration below.
+# Examples:
+# export PATH="\$HOME/bin:\$PATH"
+# export EDITOR="vim"
+# alias ll='ls -la'
+
+EOF
+  printf 'created %s\n' "$file"
+}
+
+cmd_list() {
+  ensure_home
+  printf '%-24s  %-40s  %s\n' "ID" "desc" "file-loc"
+  printf '%-24s  %-40s  %s\n' "--" "----" "--------"
+  local found=0
+  local file id desc fallback
+  shopt -s nullglob
+  for file in "$CHRC_HOME"/*.sh; do
+    found=1
+    fallback="$(basename "$file" .sh)"
+    id="$(read_meta ID "$file")"
+    desc="$(read_meta desc "$file")"
+    [[ -n "$id" ]] || id="$fallback"
+    [[ -n "$desc" ]] || desc="-"
+    printf '%-24s  %-40s  %s\n' "$id" "$desc" "$file"
+  done
+  shopt -u nullglob
+  if [[ "$found" -eq 0 ]]; then
+    printf '(no profiles found in %s)\n' "$CHRC_HOME"
+  fi
+}
+
+cmd_cp() {
+  local identifier="$1"
+  require_identifier "$identifier"
+  local file
+  file="$(require_profile "$identifier")"
+  if command -v pbcopy >/dev/null 2>&1; then
+    pbcopy < "$file"
+    printf 'copied content of %s to clipboard\n' "$file"
+  else
+    printf '%s\n' "$file"
+  fi
+}
+
+cmd_edit() {
+  local identifier="$1"
+  require_identifier "$identifier"
+  local file editor
+  file="$(require_profile "$identifier")"
+  editor="${EDITOR:-vi}"
+  "$editor" "$file"
+}
+
+cmd_show() {
+  local identifier="$1"
+  require_identifier "$identifier"
+  local file
+  file="$(require_profile "$identifier")"
+  cat "$file"
+}
+
+cmd_path() {
+  local identifier="$1"
+  require_identifier "$identifier"
+  require_profile "$identifier" >/dev/null
+  profile_path "$identifier"
+}
+
+cmd_rm() {
+  local identifier="$1"
+  require_identifier "$identifier"
+  local file answer
+  file="$(require_profile "$identifier")"
+  printf 'Remove %s? [y/N] ' "$file" >&2
+  read -r answer
+  case "$answer" in
+    y|Y|yes|YES) rm "$file"; printf 'removed %s\n' "$file" ;;
+    *) printf 'not removed\n' ;;
+  esac
+}
+
+cmd_init() {
+  cat <<'EOF'
+chrc() {
+  case "${1:-}" in
+    ""|help|-h|--help|new|list|ls|cp|copy|edit|show|path|rm|remove|init|version|-v|--version)
+      command chrc "$@"
+      ;;
+    use)
+      if [ -z "${2:-}" ]; then
+        command chrc use
+        return $?
+      fi
+      eval "$(command chrc use "$2")"
+      ;;
+    *)
+      eval "$(command chrc use "$1")"
+      ;;
+  esac
+}
+EOF
+}
+
+main() {
+  local command="${1:-help}"
+  case "$command" in
+    help|-h|--help) usage ;;
+    version|-v|--version) printf 'chrc %s\n' "$VERSION" ;;
+    init) cmd_init ;;
+    new) shift; cmd_new "${1:-}" ;;
+    list|ls) cmd_list ;;
+    cp|copy) shift; cmd_cp "${1:-}" ;;
+    edit) shift; cmd_edit "${1:-}" ;;
+    show) shift; cmd_show "${1:-}" ;;
+    path) shift; cmd_path "${1:-}" ;;
+    rm|remove) shift; cmd_rm "${1:-}" ;;
+    use) shift; cmd_use "${1:-}" ;;
+    *) cmd_use "$command" ;;
+  esac
+}
+
+main "$@"
