@@ -24,6 +24,7 @@ This only registers the `chrc` shell function during shell startup. Profiles are
 ```sh
 chrc <identifier>        # source ~/.chrc/<identifier>.sh in the current shell
 chrc new <identifier>    # create a new template
+chrc default <identifier> # load this profile automatically on shell startup
 chrc list                # list ID, desc, and file location
 chrc cp <identifier>     # copy profile content to clipboard on macOS
 chrc edit <identifier>   # edit profile with $EDITOR
@@ -38,8 +39,16 @@ chrc help                # show help
 `chrc new work` creates `~/.chrc/work.sh`:
 
 ```sh
-#ID work
-#desc Describe this runcom profile here
+# desc start
+# Describe this runcom profile here.
+# desc end
 
+# --- chrc loader ------------------------------------------------------
+export CHRC_HOME="$HOME/.chrc"
+[ -s "$HOME/.chrc/chrc/chrc" ] && . "$HOME/.chrc/chrc/chrc"
+
+# --- Runcom -----------------------------------------------------------
 # Add shell configuration below.
 ```
+
+`chrc default work` writes `work` to `~/.chrc/.default`. The next shell startup sources `~/.chrc/work.sh` automatically after registering the `chrc` function.

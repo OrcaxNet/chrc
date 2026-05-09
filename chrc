@@ -1,5 +1,5 @@
 CHRC_HOME="${CHRC_HOME:-$HOME/.chrc}"
-CHRC_VERSION="0.2.0"
+CHRC_VERSION="0.3.0"
 
 _chrc_usage() {
   cat <<'EOF'
@@ -9,6 +9,7 @@ Usage:
   chrc <identifier>        Source ~/.chrc/<identifier>.sh in the current shell
   chrc use <identifier>    Same as chrc <identifier>
   chrc new <identifier>    Create a new runcom template
+  chrc default <identifier> Set a profile to load when chrc starts
   chrc list                List runcom profiles as ID, desc, file-loc
   chrc cp <identifier>     Copy profile content to clipboard on macOS
   chrc edit <identifier>   Open profile in $EDITOR
@@ -62,18 +63,21 @@ _chrc_require_profile() {
   printf '%s\n' "$file"
 }
 
-_chrc_read_meta() {
-  local key="$1"
-  local file="$2"
-  local line
-  line="$(grep -m 1 -E "^#[[:space:]]*$key([[:space:]]+|$)" "$file" 2>/dev/null)" || true
-  printf '%s\n' "${line#* }"
+_chrc_read_desc() {
+  local file="$1"
+  sed -n '/^#[[:space:]]*desc start[[:space:]]*$/,/^#[[:space:]]*desc end[[:space:]]*$/p' "$file" 2>/dev/null \
+    | sed '1d;$d;s/^#[[:space:]]*//'
 }
 
 _chrc_use() {
-  local file
+  local file previous_skip chrc_status
   file="$(_chrc_require_profile "$1")" || return $?
+  previous_skip="${CHRC_SKIP_DEFAULT:-}"
+  CHRC_SKIP_DEFAULT=1
   . "$file"
+  chrc_status=$?
+  CHRC_SKIP_DEFAULT="$previous_skip"
+  return $chrc_status
 }
 
 _chrc_new() {
@@ -86,9 +90,15 @@ _chrc_new() {
     return 1
   fi
   cat > "$file" <<EOF
-#ID $1
-#desc Describe this runcom profile here
+# desc start
+# Describe this runcom profile here.
+# desc end
 
+# --- chrc loader ------------------------------------------------------
+export CHRC_HOME="\$HOME/.chrc"
+[ -s "\$HOME/.chrc/chrc/chrc" ] && . "\$HOME/.chrc/chrc/chrc"
+
+# --- Runcom -----------------------------------------------------------
 # Add shell configuration below.
 # Examples:
 # export PATH="\$HOME/bin:\$PATH"
@@ -105,15 +115,13 @@ _chrc_list() {
   printf '%-24s  %-40s  %s\n' "--" "----" "--------"
 
   local found=0
-  local file id desc fallback
+  local file id desc
   for file in "$CHRC_HOME"/*.sh; do
     [ -e "$file" ] || continue
     found=1
-    fallback="${file##*/}"
-    fallback="${fallback%.sh}"
-    id="$(_chrc_read_meta ID "$file")"
-    desc="$(_chrc_read_meta desc "$file")"
-    [ -n "$id" ] || id="$fallback"
+    id="${file##*/}"
+    id="${id%.sh}"
+    desc="$(_chrc_read_desc "$file" | tr '\n' ' ')"
     [ -n "$desc" ] || desc="-"
     printf '%-24s  %-40s  %s\n' "$id" "$desc" "$file"
   done
@@ -164,12 +172,31 @@ _chrc_rm() {
   esac
 }
 
+_chrc_default() {
+  local file
+  file="$(_chrc_require_profile "$1")" || return $?
+  _chrc_ensure_home
+  printf '%s\n' "$1" > "$CHRC_HOME/.default"
+  printf 'default profile set to %s (%s)\n' "$1" "$file"
+}
+
+_chrc_load_default() {
+  [ -z "${CHRC_SKIP_DEFAULT:-}" ] || return 0
+  [ -z "${CHRC_LOADING_DEFAULT:-}" ] || return 0
+  [ -f "$CHRC_HOME/.default" ] || return 0
+  local identifier
+  IFS= read -r identifier < "$CHRC_HOME/.default"
+  _chrc_require_identifier "$identifier" || return $?
+  CHRC_LOADING_DEFAULT=1 _chrc_use "$identifier"
+}
+
 chrc() {
   local command="${1:-help}"
   case "$command" in
     help|-h|--help) _chrc_usage ;;
     version|-v|--version) printf 'chrc %s\n' "$CHRC_VERSION" ;;
     new) shift; _chrc_new "${1:-}" ;;
+    default) shift; _chrc_default "${1:-}" ;;
     list|ls) _chrc_list ;;
     cp|copy) shift; _chrc_cp "${1:-}" ;;
     edit) shift; _chrc_edit "${1:-}" ;;
@@ -181,7 +208,19 @@ chrc() {
   esac
 }
 
-if [ "${0##*/}" = "chrc" ] && [ -z "${CHRC_SOURCED:-}" ]; then
+_chrc_is_sourced() {
+  case "${ZSH_EVAL_CONTEXT:-}" in
+    *:file*) return 0 ;;
+  esac
+  if [ -n "${BASH_VERSION:-}" ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    return 0
+  fi
+  return 1
+}
+
+if _chrc_is_sourced; then
+  _chrc_load_default
+else
   _chrc_usage
   printf '\nInstall by sourcing this file from your shell startup file, for example:\n'
   printf '  export CHRC_HOME="$HOME/.chrc"\n'
