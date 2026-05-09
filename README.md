@@ -41,11 +41,6 @@ chrc help                # show help
 ```sh
 #desc Describe this runcom profile here.
 
-# --- chrc loader ------------------------------------------------------
-export CHRC_HOME="$HOME/.chrc"
-[ -s "$HOME/.chrc/chrc/chrc" ] && . "$HOME/.chrc/chrc/chrc"
-
-# --- Runcom -----------------------------------------------------------
 # Add shell configuration below.
 ```
 
