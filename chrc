@@ -65,8 +65,12 @@ _chrc_require_profile() {
 
 _chrc_read_desc() {
   local file="$1"
-  sed -n '/^#[[:space:]]*desc start[[:space:]]*$/,/^#[[:space:]]*desc end[[:space:]]*$/p' "$file" 2>/dev/null \
-    | sed '1d;$d;s/^#[[:space:]]*//'
+  local line
+  line="$(grep -m 1 -E '^#[[:space:]]*desc([[:space:]]+|$)' "$file" 2>/dev/null)" || true
+  line="${line#\#}"
+  line="${line#desc}"
+  line="${line# }"
+  printf '%s\n' "$line"
 }
 
 _chrc_use() {
@@ -90,9 +94,7 @@ _chrc_new() {
     return 1
   fi
   cat > "$file" <<EOF
-# desc start
-# Describe this runcom profile here.
-# desc end
+#desc Describe this runcom profile here.
 
 # --- chrc loader ------------------------------------------------------
 export CHRC_HOME="\$HOME/.chrc"
@@ -121,7 +123,7 @@ _chrc_list() {
     found=1
     id="${file##*/}"
     id="${id%.sh}"
-    desc="$(_chrc_read_desc "$file" | tr '\n' ' ')"
+    desc="$(_chrc_read_desc "$file")"
     [ -n "$desc" ] || desc="-"
     printf '%-24s  %-40s  %s\n' "$id" "$desc" "$file"
   done

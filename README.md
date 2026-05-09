@@ -39,9 +39,7 @@ chrc help                # show help
 `chrc new work` creates `~/.chrc/work.sh`:
 
 ```sh
-# desc start
-# Describe this runcom profile here.
-# desc end
+#desc Describe this runcom profile here.
 
 # --- chrc loader ------------------------------------------------------
 export CHRC_HOME="$HOME/.chrc"
