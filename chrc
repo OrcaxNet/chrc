@@ -8,10 +8,10 @@ chrc (change runcom) - switch shell runcom snippets quickly
 Usage:
   chrc <identifier>        Source ~/.chrc/<identifier>.sh in the current shell
   chrc use <identifier>    Same as chrc <identifier>
-  chrc new <identifier>    Create a new runcom template
+  chrc new <identifier>    Create a new runcom template (with optional description)
   chrc default <identifier> Set a profile to load when chrc starts
   chrc list                List runcom profiles as ID, desc, file-loc
-  chrc cp <identifier>     Copy profile content to clipboard on macOS
+  chrc cp <source> <dest>   Copy a profile
   chrc edit <identifier>   Open profile in $EDITOR
   chrc show <identifier>   Print profile content
   chrc path <identifier>   Print profile file path
@@ -87,14 +87,15 @@ _chrc_use() {
 _chrc_new() {
   _chrc_require_identifier "${1:-}" || return $?
   _chrc_ensure_home
-  local file
+  local file desc
   file="$(_chrc_profile_path "$1")"
+  desc="${2:-Describe this runcom profile here.}"
   if [ -e "$file" ]; then
     _chrc_err "profile already exists: $file"
     return 1
   fi
   cat > "$file" <<EOF
-#desc Describe this runcom profile here.
+#desc $desc
 
 # Add shell configuration below.
 # Examples:
@@ -129,14 +130,17 @@ _chrc_list() {
 }
 
 _chrc_cp() {
-  local file
-  file="$(_chrc_require_profile "$1")" || return $?
-  if command -v pbcopy >/dev/null 2>&1; then
-    pbcopy < "$file"
-    printf 'copied content of %s to clipboard\n' "$file"
-  else
-    printf '%s\n' "$file"
+  _chrc_require_identifier "$1" || return $?
+  _chrc_require_identifier "$2" || return $?
+  local src_file dst_file
+  src_file="$(_chrc_require_profile "$1")" || return $?
+  dst_file="$(_chrc_profile_path "$2")"
+  if [ -e "$dst_file" ]; then
+    _chrc_err "profile already exists: $dst_file"
+    return 1
   fi
+  cp "$src_file" "$dst_file"
+  printf '%s -> %s\n' "$src_file" "$dst_file"
 }
 
 _chrc_edit() {
@@ -192,10 +196,10 @@ chrc() {
   case "$command" in
     help|-h|--help) _chrc_usage ;;
     version|-v|--version) printf 'chrc %s\n' "$CHRC_VERSION" ;;
-    new) shift; _chrc_new "${1:-}" ;;
+    new) shift; _chrc_new "$@" ;;
     default) shift; _chrc_default "${1:-}" ;;
     list|ls) _chrc_list ;;
-    cp|copy) shift; _chrc_cp "${1:-}" ;;
+    cp|copy) shift; _chrc_cp "$@" ;;
     edit) shift; _chrc_edit "${1:-}" ;;
     show) shift; _chrc_show "${1:-}" ;;
     path) shift; _chrc_path "${1:-}" ;;
@@ -221,5 +225,5 @@ else
   _chrc_usage
   printf '\nInstall by sourcing this file from your shell startup file, for example:\n'
   printf '  export CHRC_HOME="$HOME/.chrc"\n'
-  printf '  [ -s "$HOME/.chrc/chrc/chrc" ] && . "$HOME/.chrc/chrc/chrc"\n'
+  printf '  [ -s "$HOME/.chrc/chrc" ] && . "$HOME/.chrc/chrc"\n'
 fi
